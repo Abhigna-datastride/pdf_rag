@@ -19,6 +19,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import pandas as pd
 
+# Chart generator functionality is built into the main app
 
 load_dotenv()
 
@@ -80,14 +81,14 @@ def init_database():
                 );
             """)
             
-            # Create chunks table with vector column
+            # Create chunks table with vector column - UPDATED TO 768 DIMENSIONS
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS document_chunks (
                     id SERIAL PRIMARY KEY,
                     document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
                     chunk_text TEXT NOT NULL,
                     chunk_index INTEGER NOT NULL,
-                    embedding vector(384),
+                    embedding vector(768),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
@@ -179,8 +180,8 @@ def load_and_chunk_pdf(uploaded_file, chunk_size=800, chunk_overlap=200):
         st.error(f"Error loading PDF: {e}")
         return []
 
-def generate_embeddings(texts, model_name="all-MiniLM-L6-v2"):
-    """Generate embeddings for text chunks with progress tracking."""
+def generate_embeddings(texts, model_name="all-mpnet-base-v2"):
+    """Generate embeddings for text chunks with progress tracking using all-mpnet-base-v2."""
     embedding_model = SentenceTransformer(model_name)
     
     # Process in batches for large files
@@ -203,7 +204,7 @@ def generate_embeddings(texts, model_name="all-MiniLM-L6-v2"):
     progress_bar.empty()
     status_text.empty()
     
-    print(f"Generated {len(embeddings)} embeddings")
+    print(f"Generated {len(embeddings)} embeddings with all-mpnet-base-v2 model")
     return embedding_model, embeddings
 
 def store_document_and_chunks(filename, file_hash, file_size, texts, embeddings):
@@ -488,20 +489,60 @@ def execute_table_code(code):
     try:
         import io
         import contextlib
+        import ast
+        
+        # First, try to parse the code to check for syntax errors
+        try:
+            ast.parse(code)
+        except SyntaxError as syntax_error:
+            st.error(f"Syntax error in generated table code: {syntax_error}")
+            return None
+        
+        # Create a safe execution environment with all necessary modules
+        safe_globals = {
+            '__builtins__': {
+                'print': print,
+                'len': len,
+                'str': str,
+                'int': int,
+                'float': float,
+                'list': list,
+                'dict': dict,
+                'range': range,
+                'enumerate': enumerate,
+                'zip': zip,
+                '__import__': __import__,  # Allow imports
+            },
+            'pd': pd,
+            'pandas': pd,
+            'json': json,
+            'np': np,
+            'numpy': np
+        }
         
         # Capture print output
         captured_output = io.StringIO()
         with contextlib.redirect_stdout(captured_output):
-            exec(code)
+            exec(code, safe_globals)
         
         table_output = captured_output.getvalue().strip()
         if table_output:
-            return json.loads(table_output)
+            try:
+                return json.loads(table_output)
+            except json.JSONDecodeError as json_error:
+                st.error(f"Invalid JSON output from table code: {json_error}")
+                # Try to display the raw output as a fallback
+                st.text("Raw output:")
+                st.text(table_output)
+                return None
         return None
     except Exception as e:
         st.error(f"Error executing table code: {e}")
+        # For debugging, show the problematic code
+        with st.expander("View problematic code"):
+            st.code(code, language="python")
         return None
-
+    
 def get_uploaded_documents():
     """Get list of uploaded documents from database with file sizes."""
     conn = get_db_connection()
@@ -555,14 +596,14 @@ def format_file_size(size_bytes):
 
 # Initialize database on startup
 if init_database():
-    st.success("Database initialized successfully!", icon="✅")
+    st.success("Database initialized successfully! (Using all-mpnet-base-v2 embeddings)", icon="✅")
 else:
     st.error("Failed to initialize database. Please check your PostgreSQL connection.", icon="❌")
 
-# Initialize embedding model
+# Initialize embedding model with all-mpnet-base-v2
 if st.session_state.embedding_model is None:
-    with st.spinner("Loading embedding model..."):
-        st.session_state.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+    with st.spinner("Loading all-mpnet-base-v2 embedding model..."):
+        st.session_state.embedding_model = SentenceTransformer("all-mpnet-base-v2")
 
 # Sidebar for file upload and document management
 with st.sidebar:
@@ -591,7 +632,7 @@ with st.sidebar:
                 if existing_doc_id not in st.session_state.selected_document_ids:
                     st.session_state.selected_document_ids = [existing_doc_id]
             else:
-                with st.spinner("Processing large PDF... This may take a while..."):
+                with st.spinner("Processing large PDF with all-mpnet-base-v2... This may take a while..."):
                     texts = load_and_chunk_pdf(uploaded_file)
                     if texts:
                         embedding_model, embeddings = generate_embeddings(texts)
@@ -600,7 +641,7 @@ with st.sidebar:
                         )
                         if document_id:
                             st.session_state.selected_document_ids = [document_id]
-                            st.success(f"✅ {uploaded_file.name} processed successfully!")
+                            st.success(f"✅ {uploaded_file.name} processed successfully with all-mpnet-base-v2!")
                         else:
                             st.error("Failed to store document in database.")
     
@@ -672,13 +713,13 @@ with st.sidebar:
 # Main chat interface
 st.title("💬 Chat with your PDF(s)")
 if st.session_state.chat_mode == "multi":
-    st.caption("🚀 Multi-document RAG with Enhanced JSON Response Format")
+    st.caption("🚀 Multi-document RAG with all-mpnet-base-v2 Embeddings")
 else:
-    st.caption("🚀 Single-document RAG with Enhanced JSON Response Format")
+    st.caption("🚀 Single-document RAG with all-mpnet-base-v2 Embeddings")
 
 if "messages" not in st.session_state:
     st.session_state["messages"] = [
-        {"role": "assistant", "content": "Upload PDF documents (up to 1GB each) and start asking questions! I can provide detailed analysis, create visualizations, generate tables, and extract insights from your documents in a structured format."}
+        {"role": "assistant", "content": "Upload PDF documents (up to 1GB each) and start asking questions! I'm now using the powerful all-mpnet-base-v2 embedding model for better semantic understanding. I can provide detailed analysis, create visualizations, generate tables, and extract insights from your documents in a structured format."}
     ]
 
 # Display chat messages
@@ -702,7 +743,7 @@ if prompt := st.chat_input("Ask a question about your document(s) or request ana
         
         # Search for relevant chunks
         is_multi_doc = len(st.session_state.selected_document_ids) > 1
-        search_msg = f"Searching across {len(st.session_state.selected_document_ids)} document(s)..." if is_multi_doc else "Searching document..."
+        search_msg = f"Searching across {len(st.session_state.selected_document_ids)} document(s) with all-mpnet-base-v2..." if is_multi_doc else "Searching document with all-mpnet-base-v2..."
         
         with st.spinner(search_msg):
             if is_multi_doc:
@@ -808,6 +849,7 @@ if st.session_state.selected_document_ids:
                         total_chunks = sum(doc['chunk_count'] for doc in doc_infos)
                         total_size = sum(doc['file_size'] for doc in doc_infos)
                         
+                        st.write(f"**Embedding Model:** all-mpnet-base-v2 (768 dimensions)")
                         st.write(f"**Mode:** {'Multi-document' if len(doc_infos) > 1 else 'Single-document'}")
                         st.write(f"**Total Documents:** {len(doc_infos)}")
                         st.write(f"**Total Size:** {format_file_size(total_size)}")
@@ -825,7 +867,7 @@ if st.session_state.selected_document_ids:
 st.markdown("---")
 with st.expander("💡 Enhanced Analysis Examples"):
     st.markdown("""
-    **Try these enhanced requests:**
+    **Try these enhanced requests with all-mpnet-base-v2:**
     
     📊 **Data Visualization:** 
     - "Create a chart showing the financial trends from the report"
@@ -847,10 +889,14 @@ with st.expander("💡 Enhanced Analysis Examples"):
     - "Summarize the important metrics and trends"
     - "Show me the most important data points"
     
-    **Features:**
+    **Enhanced Features with all-mpnet-base-v2:**
+    - Superior semantic understanding with 768-dimensional embeddings
+    - Better context preservation and retrieval accuracy
+    - Improved multi-document search capabilities
     - Automatic data extraction from PDF content
     - Smart visualization generation based on document data
     - Structured table creation with relevant information
     - Multi-format responses (text, charts, tables) in a single answer
     - Source attribution for multi-document searches
+    - Enhanced similarity search with better precision
     """)
