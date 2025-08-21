@@ -19,8 +19,6 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import pandas as pd
 
-# Import the chart generator
-from chart_generator import ChartGenerator
 
 load_dotenv()
 
@@ -50,8 +48,6 @@ if "selected_document_ids" not in st.session_state:
     st.session_state.selected_document_ids = []
 if "chat_mode" not in st.session_state:
     st.session_state.chat_mode = "single"  # "single" or "multi"
-if "chart_generator" not in st.session_state:
-    st.session_state.chart_generator = ChartGenerator(openai_client)
 
 def get_db_connection():
     """Create and return a database connection."""
